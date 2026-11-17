@@ -24,10 +24,10 @@ The final research article is `main.tex`. The earlier proposal is preserved as
 - Push the implementation, tests, fixed configurations, baseline data, raw CSVs,
   summary CSV, graph-generation source, and manuscript source. Run all three
   reproduction commands after cloning the public repository once.
-- Both members are confirmed in Section 7A. Use the required `7A` section code.
+- Both members are confirmed in Section 7B. Use the required `7B` section code.
 - Rename the Overleaf project using the instructor's pattern, Group 25, both IDs,
   and the project slug:
-  `FA26_7A_Grp25_i221095_i220908_version_bound_readiness_reservations`.
+  `FA26_7B_Grp25_i221095_i220908_version_bound_readiness_reservations`.
 - Share the Overleaf project with the instructor's exact institutional email and
   grant **Editor** access. The email was missing from the copied announcement.
 - Confirm the spelling of both authors' names, IDs, affiliation, course title,

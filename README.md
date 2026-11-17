@@ -14,7 +14,7 @@ pending. The reported improvement is simulation evidence, not a deployment claim
 | Danish Atif | I22-1095 | Primary researcher: Overleaf ownership, protocol implementation, integration and submission coordination |
 | Salman Umar | I220908 | Co-researcher: literature review, experimental design, workload generation, analysis and reproducibility |
 
-Group **G25**, **Section 7A**. Both members contribute to writing, correctness review, experiments and the defense.
+Group **G25**, **Section 7B**. Both members contribute to writing, correctness review, experiments and the defense.
 
 ## Problem
 
