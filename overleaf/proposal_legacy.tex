@@ -1,0 +1,229 @@
+% Complete standalone proposal; no separate .bib file is required.
+% Upload this file to Overleaf, set it as Main document, and use pdfLaTeX.
+% For submission in the instructor template, copy the content sections,
+% abstract and bibliography while keeping that template's class and layout.
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{microtype}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlist{itemsep=3pt,topsep=5pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\emergencystretch}{3em}
+
+\title{Version-Bound Readiness Reservations for Deadline-Aware Edge--Cloud Offloading under Artifact Eviction and Updates}
+\author{Danish Atif (I22-1095)\\Primary Researcher
+\and Salman Umar (I220908)\\Co-Researcher}
+\date{Group G25 --- Section 7A\\13 September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Edge--cloud offloading decisions can become stale between readiness discovery and task execution: a required artifact version may be evicted or updated, or the advertised execution capacity may be consumed. This project proposes short-lived, version-bound readiness reservations that conditionally preserve an exact artifact version and an execution slot until dispatch or expiry. A controlled CPU-based testbed with two edge workers and one cloud worker will compare periodic advertisements, fixed-TTL advertisements, on-demand readiness checks, and the proposed protocol under varying artifact churn, network delay and arrival load. Artifact-only and slot-only ablations will separate the effects of the two reservation components. The evaluation will measure deadline satisfaction, correct-version execution, readiness failures, latency, throughput, resource holding and control overhead. The expected contribution is a reproducible characterization of the reliability--utilization tradeoff, rather than a universal performance guarantee. Novelty remains an initial hypothesis to be validated through the full literature review.
+
+Planned public research artifacts (draft placeholder; replace before submission): \url{https://github.com/REPLACE_OWNER/REPLACE_REPOSITORY}.
+\end{abstract}
+
+
+\section{Proposal and group information}
+
+Research proposal \textbullet{} Group G25 \textbullet{} Section 7A \textbullet{} Prepared 13 September 2026
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{|p{0.26\linewidth}|X|}
+\hline
+\textbf{Member} & \textbf{Role and responsibility} \\ \hline
+Danish Atif --- I22-1095 & Primary researcher: shared Overleaf ownership, protocol implementation, integration and final submission coordination. \\ \hline
+Salman Umar --- I220908 & Co-researcher: literature matrix, experiment design, workload generation, analysis and reproducibility. \\ \hline
+Both members & Review protocol correctness; conduct experiments; write, revise and defend the manuscript. Both members are in Section 7A. \\ \hline
+\end{tabularx}
+\end{center}
+
+\subsection{Approved research direction and selected title}
+
+Approved direction in the assignment guide: Edge--Cloud Intelligence. The project also addresses self-adaptive cloud computing through runtime readiness-aware dispatch. This title is finalized by the group; instructor approval is pending and must be recorded separately.
+
+\subsection{Problem and motivation}
+
+An offloading scheduler may select an edge worker because its last advertisement reports that the required artifact is loaded and capacity is available. Between advertisement, selection and execution, the artifact can be evicted, its version can change, or another request can consume the available slot. The resulting readiness race can cause refusal, reinitialization, retries or cloud fallback, consuming the task's deadline budget.
+
+The project studies whether a short-lived reservation can bridge this interval. A worker promises to retain one exact artifact version and one execution slot until the reservation is consumed or expires. The scheduler must include handshake and transfer costs in its decision. Holding resources also creates waste, so the study will measure where reservations help and where their overhead outweighs their benefit.
+
+\subsection{Scope}
+
+One scheduler, two CPU edge workers and one cloud worker; independent, versioned function tasks and soft deadlines. A container-based testbed is the primary platform; an AWS EC2 cloud worker is optional if time and budget permit. GPU inference, DNN splitting, thermal control, HPA tuning and agent-count comparisons are outside this study.
+
+\section{Research gap and questions}
+
+\subsection{Initial literature-based gap}
+
+Recent work addresses serverless offloading and cold-start latency \cite{li2025aiho}, prediction under stale distributed load information \cite{hamid2026staleness}, artifact locality and startup-aware inference placement \cite{fu2024serverlessllm}, and deadline-sensitive task placement \cite{abdi2024offloading}. These studies motivate readiness-aware decisions. Leases are an established consistency mechanism \cite{gray1989leases}, so the proposed study does not claim to invent leases or caching.
+
+The initial gap is a controlled evaluation of the interval between discovering readiness and starting a task when both exact artifact versions and execution capacity can change. The proposed contribution is a bounded reservation protocol and an experimental characterization of its reliability--utilization tradeoff under artifact eviction and updates. Full-text review must confirm the closest prior work and refine this gap before making a novelty claim.
+
+\subsection{Primary research question}
+
+Can short-lived, version-bound readiness reservations improve deadline satisfaction under artifact eviction and updates, while preserving correct-version execution and acceptable worker utilization, compared with readiness advertisements and on-demand readiness checks without reservations?
+
+\subsection{Objectives}
+
+\begin{enumerate}
+\item Quantify how advertisement age, artifact churn and competing arrivals affect readiness refusals, retries and deadline satisfaction.
+\item Design and implement a bounded, single-use reservation that binds an exact artifact version to an execution slot, with cancellation, expiry and restart invalidation.
+\item Compare the protocol with fair baselines and ablations, identifying reservation durations and workload regimes that improve deadline satisfaction without excessive capacity waste or control overhead.
+\end{enumerate}
+
+\subsection{Distinct contribution and overlap control}
+
+The unit of study is the dispatch-to-start readiness race. Unlike the listed peer topics, this work neither changes autoscaler configuration nor predicts business events, recalibrates forecasts, compares recovery agents, studies compound cluster faults, thermally offloads LLMs or adapts DNN split points. Its specific mechanism preserves an exact artifact version and a slot for a bounded interval. Overlap with general offloading and distributed consistency literature remains possible and will be addressed through the literature matrix and explicit mechanism comparisons.
+
+\subsection{Testable expectation}
+
+Reservations may reduce readiness-related failures when churn is high and handshake delay is modest. Under low churn, long delays or high contention, resource holding may reduce throughput. Either result is publishable evidence if the experiment is controlled and reproducible; no numerical improvement is promised.
+
+\section{Proposed methodology}
+
+\subsection{System and workload}
+
+Implement a lightweight scheduler and worker services with a bounded in-memory artifact cache and execution-slot pool. Use at least three deterministic CPU function artifacts, each with two identifiable versions, such as compression, image transformation or numerical kernels. Outputs include a task ID and artifact hash. Measure actual initialization and execution costs during calibration; use generated, seeded arrivals and disclosed network emulation rather than fabricated observations.
+
+\subsection{Reservation protocol}
+
+\begin{enumerate}
+\item The scheduler estimates completion time using observed transfer, queue, initialization and execution costs, then requests the required artifact version from a candidate worker.
+\item The worker atomically checks the artifact hash and available slot. On acceptance it pins that version and slot, returning a token containing worker epoch, task ID, artifact hash, reservation ID and expiry.
+\item The scheduler dispatches with the token only if its conservative remaining deadline budget allows it. A worker validates epoch, identity, hash, expiry and single-use state before atomically starting the task.
+\item Cancellation or expiry releases the reservation. Consumption transfers its artifact reference and slot to the running task until completion. Updates can install a new version beside a pinned old version within the cache budget; if this is impossible, defer the update or refuse the reservation. Hard invalidation causes explicit refusal and fallback, never execution of a substitute version.
+\item A failed check triggers a bounded retry or cloud fallback only if the deadline budget allows it. Record terminal failure when no feasible option remains. Task IDs prevent duplicate execution on the same worker; cross-worker retry results are deduplicated at the scheduler.
+\end{enumerate}
+
+\subsection{Correctness and operational limits}
+
+Worker monotonic time governs expiry; remote clock values are not compared directly. Configure conservative scheduler margins from measured round-trip delay. A reservation is a conditional promise within one worker epoch, not a guarantee against crashes, partitions or hard invalidation. Restart changes the epoch and invalidates old tokens. All policies enforce the requested version and obey identical cache and CPU limits.
+
+A small concurrency test will exercise consume/cancel/expiry races, token replay and restart invalidation before performance experiments. Log every state transition. Bound outstanding reservations and retries to avoid indefinite pinning and uncontrolled overload.
+
+\section{Experimental design and metrics}
+
+\subsection{Comparison policies}
+
+\begin{enumerate}
+\item Periodic advertisements: dispatch using the latest readiness and load report.
+\item Fixed-TTL advertisements: reject reports older than a configured age threshold.
+\item On-demand check: query readiness immediately before dispatch without reserving resources.
+\item Proposed protocol: on-demand exact-version reservation with artifact pinning and slot holding.
+\end{enumerate}
+
+Use artifact-only pinning and slot-only holding as focused ablations. Every policy validates the exact version before execution and uses the same placement estimator, workload seeds, fallback policy, cache limits and compute budgets. A correctly implemented baseline may also have zero wrong-version executions; the claimed gain must instead appear in refusals, deadline performance or resource cost.
+
+\subsection{Conditions and analysis}
+
+Vary eviction/update rate, network delay, arrival load, advertisement interval and reservation duration. Start with a small factorial screening design, then examine the most informative regimes. Calibrate factor values on the actual testbed and freeze them before final runs. Use at least 10 independent seeded repetitions per retained configuration, increasing repetitions if confidence intervals remain too wide within the available time. Randomize policy execution order and separate warm-up from measurement.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{|p{0.26\linewidth}|X|}
+\hline
+\textbf{Metric} & \textbf{Definition / reporting} \\ \hline
+Deadline satisfaction & Tasks completed by their deadline / all submitted tasks; includes rejections, timeouts and fallback failures in the denominator. \\ \hline
+Correct-version execution & Reported executed artifact hash matches the requested hash; verify deterministic task outputs separately and count invalid-version attempts and refusals. \\ \hline
+Readiness failures & Selected-worker refusals caused by missing version, expired token or unavailable capacity, per submitted task. \\ \hline
+Latency and throughput & End-to-end p50/p95/p99 latency and completed tasks per second; report failed tasks separately. \\ \hline
+Resource cost & Execution utilization, slot-time held without execution, pinned byte-seconds and initialization count. \\ \hline
+Control and fallback cost & Handshake latency, control messages/bytes, retries, cloud fallback rate and cloud execution time. \\ \hline
+\end{tabularx}
+\end{center}
+
+Report paired per-seed differences with 95\% bootstrap confidence intervals and effect sizes. Publish run-level results and failure categories; avoid relying only on averages. Identify Pareto tradeoffs between deadline satisfaction and reservation waste rather than selecting a favorable duration after seeing final results.
+
+\section{Feasibility, schedule and expected outcomes}
+
+\subsection{100-day plan and current position}
+
+The guide's C1 deadline was 8 September (day 10); this proposal is prepared on 13 September (day 15). C1 completion or late acceptance is not assumed. The remaining plan fits within the original 100-day course schedule, leaving approximately 85 days for execution.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{|p{0.26\linewidth}|X|}
+\hline
+\textbf{Target} & \textbf{Planned deliverable} \\ \hline
+13--20 September & Finalize proposal; confirm instructor approval, group fields, shared Overleaf, public repository and official sheet. \\ \hline
+By 3 October --- C2 / day 35 & Review approximately 15--20 papers; document closest mechanisms, gap and frozen initial experiment plan. \\ \hline
+4 October--2 November --- C3 / day 65 & Implement protocol and baselines; correctness checks, pilot experiments and preliminary results. \\ \hline
+3--17 November --- day 80 & Complete retained configurations, analysis and mandatory full manuscript draft. \\ \hline
+18 November--7 December --- day 100 & Revise paper, prepare poster and defense, finalize reproducibility package and instructor-approved venue submission evidence. \\ \hline
+\end{tabularx}
+\end{center}
+
+\subsection{Expected outcomes}
+
+\begin{enumerate}
+\item A documented protocol with explicit assumptions, resource bounds and failure behavior.
+\item A reproducible benchmark and dataset of measured runs comparing four policies and two focused ablations.
+\item Evidence identifying when readiness reservations help, when they waste capacity, and how version updates affect the tradeoff.
+\item A complete manuscript, poster, public artifact package and defensible explanation of limitations.
+\end{enumerate}
+
+\subsection{Risks and fallback plan}
+
+If artifact initialization is negligible, use calibrated CPU artifacts with measurable loading costs and report their characteristics rather than adding arbitrary delays as the primary workload. If EC2 access is unavailable, use a cloud-role container with explicitly reported resource and network limits. If the factorial design becomes too large, preserve all main baselines and reduce factor levels before final runs. If novelty review reveals close prior work, focus the contribution on joint version/slot reservation and update-pressure ablations with instructor agreement.
+
+Keep scope limited to independent tasks and soft deadlines. Results from an emulated edge--cloud testbed cannot establish universal production performance or hard real-time guarantees.
+
+\section{Overleaf, GitHub and Google Sheet setup}
+
+\subsection{Overleaf setup}
+
+Danish, as primary researcher, creates the shared project from the course template: \url{https://www.overleaf.com/read/fbqfmcyhhksr#a723d4}. Use the project name G25\_I22-1095\_I220908\_readiness\_reservations\_edge\_cloud, verifying the exact ID spelling against the official sheet. Invite Salman as editor and basharat.hussain.v@isb.nu.edu.pk as editor; maintain instructor access throughout the project.
+
+Keep the instructor template's document class and layout. Add the title, both authors, group/section, abstract and the supplied proposal.tex sections; merge references.bib and use the template's bibliography mechanism. Add the actual public GitHub URL as the final line of the abstract once the repository exists. Placeholder draft URL: \url{https://github.com/REPLACE_OWNER/REPLACE_REPOSITORY}. Overleaf project: \url{https://www.overleaf.com/project/REPLACE_PROJECT_ID}.
+
+\subsection{Public GitHub setup}
+
+Create a public repository, invite the groupmate and upload the supplied README plus proposal and Overleaf sources. As implementation develops, add source code, environment/dependency files, workload generators, configurations, seeds, measured raw results, analysis scripts and figures. Select a license the group agrees to use and add CITATION.cff when metadata is settled. Record the exact run commands once implemented. Exclude credentials and private course/student data beyond the group details intentionally disclosed.
+
+\subsection{Google Sheet completion}
+
+A populated registration-row CSV is supplied as a transfer aid. It does not update the official Google Sheet. Enter it in the assigned G25 row and complete fields that require institutional emails, actual URLs, instructor approval/access and submission evidence. Official sheet placeholder: \url{https://docs.google.com/spreadsheets/d/REPLACE_SHEET_ID/edit}.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{|p{0.26\linewidth}|X|}
+\hline
+\textbf{Registration field} & \textbf{Value / required action} \\ \hline
+Group; direction; topic & G25; Edge--Cloud Intelligence; finalized title on page 1. \\ \hline
+Members and roles & Danish Atif, I22-1095, Primary; Salman Umar, I220908, Co-researcher. \\ \hline
+Section and emails & Both members: Section 7A. Both institutional emails: REPLACE. \\ \hline
+Problem / RQ / keywords & Use this proposal's problem and primary RQ. Keywords: edge--cloud offloading; readiness reservation; artifact versioning; cache eviction; deadlines; leases. \\ \hline
+Approval status & Proposed; change to Approved only after instructor confirmation. \\ \hline
+Links / instructor access & Replace Overleaf, GitHub and official sheet links; verify editor access. \\ \hline
+Milestones / venue / submission & Enter guide deadlines; venue pending instructor confirmation; submission evidence pending. \\ \hline
+\end{tabularx}
+\end{center}
+
+Completion status: proposal content prepared; online Overleaf setup pending; public repository setup pending; registration content prepared but official sheet entry and validation pending. Do not mark the official sheet ``complete'' until those actions are performed.
+
+\section{Research integrity and venue}
+Use real measured outcomes, disclose generated workloads and emulation, and keep both students responsible for understanding every claim and experiment. Do not present planned outcomes as results. The guide contains differing general venue descriptions; confirm the instructor's journal requirement, including impact-factor criteria, before selecting or submitting to a venue. Venue and acceptance are not claimed in this proposal.
+\begin{thebibliography}{9}
+\bibitem{li2025aiho} Xin Li, Long Chen, Zian Yuan, and Guangrui Liu. ``AIHO: Enhancing task offloading and reducing latency in serverless multi-edge-to-cloud systems.'' Future Generation Computer Systems, vol. 165, article 107607, 2025. \url{https://doi.org/10.1016/j.future.2024.107607}
+
+\bibitem{hamid2026staleness} Sawsan Ali Hamid, Yassine Boujelben, and Faouzi Zarai. ``Exploiting and Mitigating Staleness in Distributed Edge Offloading via Predictive Load Awareness.'' Network, vol. 6, no. 3, article 69, 2026. \url{https://doi.org/10.3390/network6030069}
+
+\bibitem{fu2024serverlessllm} Yao Fu, Leyang Xue, Yeqi Huang, Andrei-Octavian Brabete, Dmitrii Ustiugov, Yuvraj Patel, and Luo Mai. ``ServerlessLLM: Low-Latency Serverless Inference for Large Language Models.'' 18th USENIX Symposium on Operating Systems Design and Implementation (OSDI), pp. 135--153, 2024. \url{https://www.usenix.org/conference/osdi24/presentation/fu}
+
+\bibitem{abdi2024offloading} Somayeh Abdi, Mohammad Ashjaei, and Saad Mubeen. ``Task Offloading in Edge-Cloud Computing Using a Q-Learning Algorithm.'' 14th International Conference on Cloud Computing and Services Science (CLOSER), pp. 159--166, 2024. \url{https://doi.org/10.5220/0012590800003711}
+
+\bibitem{gray1989leases} Cary G. Gray and David R. Cheriton. ``Leases: An Efficient Fault-Tolerant Mechanism for Distributed File Cache Consistency.'' 12th ACM Symposium on Operating Systems Principles (SOSP), pp. 202--210, 1989. \url{https://doi.org/10.1145/74850.74870}
+\end{thebibliography}
+\end{document}

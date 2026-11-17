@@ -1,0 +1,37 @@
+# macOS and editor metadata
+.DS_Store
+._*
+*.swp
+*.swo
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Generated scratch/rendering directories
+tmp/
+
+# Superseded proposal binaries and duplicate unpacked exports
+proposal/
+output/assignment_01/
+output/final_article/G25_IEEE_Overleaf_Source/
+
+# LaTeX build products (source and retained figures stay tracked)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key

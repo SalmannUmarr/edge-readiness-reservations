@@ -1,0 +1,176 @@
+% Draft for the research project represented by this Overleaf proposal.
+% Compile with pdfLaTeX. Replace the repository placeholder before submission.
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\renewcommand{\arraystretch}{1.12}
+\setlength{\emergencystretch}{3em}
+
+\title{Version-Bound Readiness Reservations for Deadline-Aware Edge--Cloud Offloading under Artifact Eviction and Updates}
+\author{Danish Atif (I22-1095) \and Salman Umar (I220908)\\Group G25 --- Section 7A}
+\date{Full manuscript draft --- 10 November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An edge scheduler can select a worker that appears ready, only to find at dispatch that the required artifact version has been evicted or replaced, or that its execution slot has been claimed. We study this dispatch-to-start readiness race with a deterministic discrete-event model of one constrained edge worker and a higher-latency cloud fallback. The proposed protocol atomically reserves an exact artifact version and one execution slot for a bounded, single-use token. We compare periodic advertisements, on-demand checking, artifact-only and slot-only ablations, and joint reservations across 24 configurations of dispatch delay, eviction rate, contention, and token lifetime; each configuration uses 30 shared seeds and 1,000 tasks per policy. In a representative high-stress condition (30~ms dispatch delay, 8 evictions/s, load coefficient 0.75, 50~ms token lifetime), joint reservation reaches 84.73\% deadline satisfaction versus 59.88\% for on-demand checking and 46.04\% for advertisements. It eliminates modeled dispatch-time readiness refusals while holding artifact state and occasionally wasting reserved slot time. These are simulation results, not a deployment-performance claim: hazards and costs are scenario parameters, and the model has one edge worker and no real container or control-plane implementation. The contribution is a reproducible, mechanism-focused characterization of the reliability--resource tradeoff.
+
+\vspace{2pt}
+\noindent\textbf{Keywords:} edge--cloud offloading; readiness; artifact versioning; cache eviction; reservations; soft deadlines.
+
+\noindent\textbf{Implementation artifact:} \url{https://github.com/SalmannUmarr/edge-readiness-reservations}
+\end{abstract}
+
+\section{Introduction}
+
+Edge--cloud systems often choose an execution site from advertised artifact and capacity state. That observation can be stale before the request reaches the worker. During the resulting interval, a cache can evict or replace an exact function artifact, and competing work can occupy the observed slot. The scheduler then faces refusal, an initialization or retry path, or cloud fallback after part of the soft-deadline budget has already elapsed.
+
+Existing systems make valuable but different contributions. Komet places serverless services for moving low-Earth-orbit environments and evaluates a placement/migration tradeoff \cite{pfandzelter2024komet}. AIHO addresses offloading and latency in serverless multi-edge-to-cloud systems \cite{li2025aiho}; ServerlessLLM studies locality and startup-aware LLM inference placement \cite{fu2024serverlessllm}; and stale-load-aware offloading considers predictive information quality \cite{hamid2026staleness}. Leases themselves are established consistency mechanisms \cite{gray1989leases}. None of these facts alone establishes a novelty claim for this work. Instead, this paper isolates a narrow question: what happens when both an exact artifact version and an execution slot can become unavailable between readiness observation and task start?
+
+We evaluate a short-lived, version-bound readiness reservation. After atomically checking a requested artifact hash and a slot, the worker issues a single-use token tied to its epoch, the task, the hash, and an expiry. Until consumption, cancellation, or expiry, the token pins the artifact and holds the slot. The protocol does not promise survival across a crash, partition, or hard invalidation.
+
+This paper makes three bounded contributions:
+\begin{enumerate}
+\item a precise dispatch-to-start model that separates artifact and slot hazards while preserving exact-version execution for every policy;
+\item a five-policy controlled comparison, including artifact-only and slot-only ablations; and
+\item seeded raw results, summaries, and tests supporting reproducibility of the simulation.
+\end{enumerate}
+
+\section{Background and research question}
+
+Komet is the selected baseline because its public artifact includes deterministic scheduling outputs suitable for a focused verification. We recalculate its \S8.1 trace-derived results from the released CSVs. Table~\ref{tab:komet} shows exact reproduction of migration counts and mean RTT agreement within 0.005~ms of values printed to two decimals. This is a verification of released traces, not a rerun of Komet's full distributed deployment.
+
+\begin{table}[ht]
+\centering
+\caption{Komet \S8.1 released-trace verification.}
+\label{tab:komet}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Strategy & Paper RTT (ms) & Recalculated RTT (ms) & Migrations \\
+\midrule
+MinMax & 4.980 & 4.9849 & 16 \\
+Komet 10\% & 4.990 & 4.9901 & 12 \\
+Komet 25\% & 5.220 & 5.2177 & 9 \\
+Komet 1 ms & 5.040 & 5.0373 & 12 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our research question is: \emph{Can short-lived, version-bound readiness reservations improve deadline satisfaction under artifact eviction and updates, while preserving correct-version execution and acceptable worker utilization, compared with readiness advertisements and on-demand readiness checks without reservations?}
+
+We test four expectations: (i) a valid joint reservation reduces dispatch-time refusal relative to on-demand checking; (ii) fewer refusals improve deadline satisfaction where fallback is costly; (iii) single-resource reservations have intermediate outcomes when both hazards are active; and (iv) a token lifetime shorter than dispatch delay cannot preserve readiness.
+
+\section{Protocol and model}
+
+\subsection{Reservation protocol}
+
+The scheduler selects a candidate using a common completion-time estimator. It asks the worker to atomically check the requested version and a free execution slot. A successful worker returns a token containing the worker epoch, task identifier, exact artifact hash, reservation identifier, and expiry. The scheduler dispatches only while the token is valid and the remaining deadline budget permits. The worker consumes a token at most once after validating all fields. Cancellation or expiry releases the pin and slot; a restart invalidates tokens by changing the worker epoch. A mismatch is a refusal, never execution of a substitute local version.
+
+The protocol is deliberately conditional. It does not provide a hard real-time guarantee, distributed crash recovery, token authentication, or clock synchronization across workers. A networked prototype would need unguessable or signed tokens, persistent replay protection where required, and measured control-plane margins.
+
+\subsection{Simulator}
+
+The discrete-event simulator has one scheduler, one single-slot edge worker, and a reliable but higher-latency cloud fallback. Each task has an arrival time, exact version, absolute soft deadline, edge RTT, and runtime. Between selection and dispatch, independent stochastic events may evict or replace the artifact or claim the slot. Failed edge starts fall back to cloud after a fixed retry penalty. All policies enforce the same exact-version rule, placement estimator, deadlines, edge/cloud costs, and fallback logic.
+
+The comparison policies are:
+\begin{enumerate}
+\item \textbf{Advertisement}: select from a periodic readiness snapshot.
+\item \textbf{On-demand}: query current readiness but hold neither resource.
+\item \textbf{Artifact-only}: pin the requested version but not the slot.
+\item \textbf{Slot-only}: hold the slot but not the artifact version.
+\item \textbf{Joint reservation}: atomically pin the version and hold the slot.
+\end{enumerate}
+
+The model does not represent real cache eviction, container image transfer, multiple worker queues, correlated failures, satellite dynamics, authentication overhead, or energy and monetary costs. It therefore tests internal mechanism behavior rather than production-cloud superiority.
+
+\section{Experimental method}
+
+The frozen matrix varies dispatch delay (10 or 30~ms), eviction rate (2 or 8 events/s), competing-load coefficient (0.35 or 0.75), and reservation lifetime (20, 50, or 100~ms), yielding 24 cells. Each policy is run for 30 independent seeds of 1,000 tasks. Within a seed, policies receive the same generated tasks and random variates, enabling paired comparisons. Defaults include 18 arrivals/s, 4 replacement events/s, 24~ms edge runtime, 42~ms cloud runtime, 62~ms cloud RTT, 50~ms advertisement interval, 12~ms retry penalty, 128~MB artifact size, and 2\% cancellations. Deadlines are uniformly 92--142~ms after arrival and edge RTT is uniformly 9--21~ms.
+
+The primary metric is deadline satisfaction: completed-by-deadline tasks divided by all submitted tasks. Secondary metrics are dispatch-time refusal rate, fallback rate, mean and p95 latency, control messages, pinned MB-seconds, and unused reserved slot-seconds. Reported confidence intervals are 95\% normal intervals across the 30 seed-level observations ($1.96s/\sqrt{30}$). The raw rows remain available for paired analysis; we do not infer statistical significance solely from confidence-interval overlap.
+
+\section{Results}
+
+\subsection{Representative stress condition}
+
+Table~\ref{tab:stress} reports the most demanding retained condition: 30~ms dispatch delay, 8 evictions/s, competing-load coefficient 0.75, and 50~ms lifetime. A 50~ms lifetime covers the 30~ms dispatch interval. Joint reservation has no modeled readiness refusals and achieves the highest deadline satisfaction. Relative to on-demand, the absolute improvement is 24.85 percentage points; relative to advertisement, it is 38.69 points. All policies record zero invalid-version executions because exact-version rejection is enforced uniformly.
+
+\begin{table*}[ht]
+\centering
+\caption{Mean outcomes in the representative stress condition; $\pm$ is the 95\% interval across 30 seeds.}
+\label{tab:stress}
+\small
+\begin{tabularx}{\textwidth}{lrrrrr}
+\toprule
+Policy & Deadline satisfaction & Refusal rate & Mean latency (ms) & p95 (ms) & Messages/run \\
+\midrule
+Advertisement & 46.04\% $\pm$ 0.57 & 43.51\% & 117.03 & 146 & 523 \\
+On-demand & 59.88\% $\pm$ 0.61 & 25.69\% & 109.39 & 146 & 2,523 \\
+Artifact-only & 67.47\% $\pm$ 0.54 & 17.36\% & 104.15 & 146 & 3,294 \\
+Slot-only & 72.78\% $\pm$ 0.57 & 13.59\% & 98.88 & 146 & 3,429 \\
+Joint reservation & \textbf{84.73\% $\pm$ 0.46} & \textbf{0.00\%} & \textbf{90.81} & \textbf{104} & 3,285 \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+The ablations support the mechanism interpretation without proving generality. Artifact-only reservation leaves slot contention exposed; slot-only reservation leaves eviction and replacement exposed. Slot-only is stronger in this cell because the configured competing-slot hazard is more influential than the modeled artifact hazard. That result should not be generalized to other systems or workloads.
+
+\subsection{Lifetime boundary and resource cost}
+
+At 30~ms dispatch delay, a 20~ms lifetime expires before dispatch. It therefore cannot protect either resource for the full gap, and readiness refusals remain possible. At 50 and 100~ms, the token covers dispatch and joint reservation removes the modeled race; the longer lifetime has no further readiness benefit in this model.
+
+The benefit is not free. In the representative stress condition, joint reservation pins approximately 1,464~MB-seconds of artifact state per 1,000-task seed and wastes about 0.233~seconds of reserved slot time because of cancellation. It sends more messages than advertisement or on-demand checking. These costs make token-duration selection a resource-allocation decision: the appropriate lifetime is bounded just above measured control-plane delay, not maximized.
+
+\section{Discussion}
+
+The results support the narrow causal explanation built into the simulator: if a token atomically protects the two resources that otherwise change between check and use, there is no modeled dispatch-time refusal while the token remains valid. The gain in deadline satisfaction follows because cloud fallback has a larger latency penalty. This is not evidence that a reservation will improve every edge deployment, nor that the simulated hazard rates match a real platform.
+
+The comparison is deliberately fair in one important sense: no baseline can execute the wrong artifact version. A design that allowed stale-version execution could superficially improve latency while violating the task contract. Correct-version execution is therefore treated as a safety requirement, not a competing optimization target.
+
+Threats to validity are substantial. The model uses one edge worker and one slot, independent hazards, perfect local time, deterministic policy semantics, and scenario parameters instead of measurements. It assumes reliable cloud fallback and does not model scheduler failure, token forgery, correlated cache pressure, queues, or real worker restart behavior. The Komet verification corroborates trace aggregation only; it does not validate the proposed protocol.
+
+\section{Reproducibility and next validation}
+
+The artifact contains the simulator, fixed seed matrix, raw per-run results, summaries, baseline aggregation script, and unit tests. The following commands reproduce the retained outputs:
+
+\begin{verbatim}
+python3 scripts/reproduce_komet.py
+python3 -m unittest discover -s tests -v
+python3 scripts/run_experiments.py
+\end{verbatim}
+
+The next empirical phase should implement two constrained edge workers and one cloud-role worker in containers, measure cache initialization, execution, and control-plane costs, then freeze a calibrated configuration before confirmatory runs. It should add worker epochs and unguessable or signed tokens, test restart/cancellation/replay behavior, and report all terminal failure categories. Until that work is completed, the present contribution must be described as a reproducible simulation study.
+
+\section{Conclusion}
+
+Version-bound readiness reservations address a specific time-of-check-to-time-of-use race: a chosen worker can lose either the requested artifact version or a free execution slot before dispatch. In a seeded single-worker simulation, joint reservations eliminate the modeled readiness refusal when their lifetime covers dispatch and improve deadline satisfaction in high-churn, high-contention conditions. The improvement requires more control work and resource holding, and the model's constraints prohibit a deployment claim. The principal result is a transparent basis for a calibrated container testbed, not a universal scheduling guarantee.
+
+\begin{thebibliography}{9}
+\bibitem{pfandzelter2024komet} Tobias Pfandzelter and David Bermbach. ``Komet: A Serverless Platform for Low-Earth Orbit Edge Services.'' \emph{ACM Symposium on Cloud Computing}, 2024. \url{https://doi.org/10.1145/3698038.3698517}
+
+\bibitem{li2025aiho} Xin Li, Long Chen, Zian Yuan, and Guangrui Liu. ``AIHO: Enhancing task offloading and reducing latency in serverless multi-edge-to-cloud systems.'' \emph{Future Generation Computer Systems}, 165, 107607, 2025. \url{https://doi.org/10.1016/j.future.2024.107607}
+
+\bibitem{hamid2026staleness} Sawsan Ali Hamid, Yassine Boujelben, and Faouzi Zarai. ``Exploiting and Mitigating Staleness in Distributed Edge Offloading via Predictive Load Awareness.'' \emph{Network}, 6(3), 69, 2026. \url{https://doi.org/10.3390/network6030069}
+
+\bibitem{fu2024serverlessllm} Yao Fu et al. ``ServerlessLLM: Low-Latency Serverless Inference for Large Language Models.'' \emph{18th USENIX Symposium on Operating Systems Design and Implementation}, 2024. \url{https://www.usenix.org/conference/osdi24/presentation/fu}
+
+\bibitem{gray1989leases} Cary G. Gray and David R. Cheriton. ``Leases: An Efficient Fault-Tolerant Mechanism for Distributed File Cache Consistency.'' \emph{12th ACM Symposium on Operating Systems Principles}, 1989. \url{https://doi.org/10.1145/74850.74870}
+\end{thebibliography}
+
+\end{document}
